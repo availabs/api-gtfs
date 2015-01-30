@@ -39,13 +39,21 @@ module.exports.routes = {
         controller    : 'AgencyController',
         action        : 'routes'
   },
-  '/agency/:id/routes/:route_id/schedule': {
+  '/agency/:id/routes/:routeId/schedule': {
         controller    : 'AgencyController',
         action        : 'routeSchedule'
   },
   '/agency/:id/stops': {
         controller    : 'AgencyController',
         action        : 'stops'
+  },
+  '/agency/:id/day/:day/cache': {
+        controller    : 'AgencyController',
+        action        : 'createCachedObject'
+  } , 
+  '/agency/:id/day/:day/routeData': {
+        controller    : 'AgencyController',
+        action        : 'routeData'
   }
 
 
