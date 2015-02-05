@@ -1,5 +1,5 @@
 //fetch and clean .js
-
+var assetCache = require('./assetCache.js')
 var db = require('./dbmod.js').DB;
 var fetchmod = {
 	
@@ -41,7 +41,7 @@ var fetchmod = {
 		var id = route.agency_id, day= route.day, routeId=route.route_id,format= route.format;
 		var patherbuilder = require('../support/pather.js');    //import the pather object for cleaning data and graph build
 		var pather = patherbuilder.patherbuilder().pather;
-		var intervalStructure= require('../support/intervals.js').intervalStructure;//interval generator object;
+		var intervalStructure= require('../support/intervals.js').intervalStructure();//interval generator object;
 		var geoJson,stopData;
 		var Stops=[],Routes=[],RDict = {};
 		var routeCb = function(data,err){  					//on retreival of route data
@@ -98,11 +98,11 @@ var fetchmod = {
 				var newRoute = pather.getStops(route_id,Routes,pathcoll);
 				newRoute = pather.setShapes(newRoute);
 				var graph = pather.graph;
-				console.log
 				intervalStructure.addIntervals(tripData,newRoute,'route_'+route_id,Stops,graph);
 				count += 1;
-				if(count >= numCalls)
+				if(count >= numCalls){
 					return afterCallback()
+				}
 				return;
 			};
 		}

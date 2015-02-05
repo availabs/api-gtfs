@@ -38,15 +38,17 @@ var TimeObj = function(){
 		this.lineClass='';
 	}
 
-var intervalStructure = {
-	intervalObj:{},
-	addIntervals:function (tripData,RouteData,route_id,Stops,graph){
-		this.intervalObj[route_id] = {id:route_id,trips:getAllRouteIntervals(tripData,RouteData,route_id,Stops,graph)()};
-	},
+var intervalStructure = function(){
+	return {
+		intervalObj:{},
+		addIntervals:function (tripData,RouteData,route_id,Stops,graph){
+			this.intervalObj[route_id] = {id:route_id,trips:getAllRouteIntervals(tripData,RouteData,route_id,Stops,graph)()};
+		},
 
-	getIntervals:function(){
-		return this.intervalObj;
-	},
+		getIntervals:function(){
+			return this.intervalObj;
+		},
+	};
 }
 
 var nparse = require('./nparse.js').nparse;
