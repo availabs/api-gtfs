@@ -51,7 +51,7 @@ var intervalStructure = function(){
 	};
 }
 
-var nparse = require('./nparse.js').nparse;
+var nparse = require('./nparse.js');
 
 function getIntervals(oneTripsData,RouteData,route_id,Stops,graph){
 

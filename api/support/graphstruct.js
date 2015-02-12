@@ -1,1 +1,1 @@
-/home/avail-gourd/code/livegtfs/example/graphstruct.js
+../../../livegtfs/api/graphstruct.js
