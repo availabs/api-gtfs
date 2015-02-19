@@ -64,7 +64,7 @@ var fetchmod = {
 						tripData[trip_id] = []
 					tripData[trip_id].push(d);				
 				});
-				debugger;
+				
 				var pathcoll = pather.getPathCollection(Routes,Stops);
 				var newRoute = pather.getStops(route_id,Routes,pathcoll);
 				newRoute = pather.getRouteSegs(newRoute);
@@ -94,7 +94,6 @@ function distance(a,b){
 
 function findJunctions(feats){
 		var eqpts = [];
-		debugger;
 		feats.forEach(function(d){
 			var matrix = d.geometry.coordinates; 			//we have a multiline string so we start with a matrix of points
 			for(var i = 0; i < matrix.length; i++){  		//loop through each linestring
