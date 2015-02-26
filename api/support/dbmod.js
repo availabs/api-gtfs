@@ -131,4 +131,4 @@ var DBMod = {
 	
 }
 
-module.exports={DB:DBMod};
+module.exports=DBMod;

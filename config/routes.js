@@ -54,6 +54,10 @@ module.exports.routes = {
   '/agency/:id/day/:day/routeData': {
         controller    : 'AgencyController',
         action        : 'routeData'
+  },
+  '/agency/:id/segmentData':{
+        controller    : 'AgencyController',
+        action        : 'segmentData' 
   }
 
 

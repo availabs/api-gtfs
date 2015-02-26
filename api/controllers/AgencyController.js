@@ -169,7 +169,7 @@ module.exports = {
 	},
 	routeData:function(req,res){
 		
-		var fetchmod = require('../support/fetchandclean.js').fetchmod;
+		var fetchmod = require('../support/fetchandclean.js');
 		var routeid;
 		//First get the routes of the particular system
 		if(typeof req.param('id') == 'undefined'){
@@ -203,6 +203,37 @@ module.exports = {
 			
 		}
 		
+	},
+	segmentData: function(req,res){
+		var pather = require('../support/pather.js'), wantsRoute=false,route='',id='';
+		var fetchmod = require('../support/fetchandclean.js');
+
+		if(typeof req.param('id') === 'undefined'){
+			res.send('{status:"error",message:"Missing parameter: id. (Agency)"}');
+		}
+		if(typeof req.param('routeId') !== 'undefined'){
+			wantsRoute=true;
+			route = req.param('routeId');
+		}
+		id = req.param('id');
+		var assetDir = 'segmentData/'
+		var assetFile= req.param('id');
+		assetCache.checkCache(assetDir,assetFile,function(data){
+			if(data && wantsRoute){
+				res.json(data[route]);
+			}
+			else if(data){
+				res.json(data);
+			}
+			else{
+				var struct = {'id':id,'route':route};
+				fetchmod.fetchSegs(struct,function(data,err){
+					if(err) console.log(err);
+					res.json(data);
+					assetCache.addData(assetDir,assetFile,data);
+				})
+			}
+		})
 	},
 	createCachedObject: function(req,res){
 		var rtype = req.param('requestType');

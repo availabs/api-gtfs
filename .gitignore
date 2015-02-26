@@ -7,7 +7,7 @@
 .tmp
 assets/routeData
 assets/routeSchedule
-
+assets/segmentData
 
 ########################
 # node.js / npm

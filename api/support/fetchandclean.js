@@ -1,11 +1,36 @@
 //fetch and clean .js
 var assetCache = require('./assetCache.js')
-var db = require('./dbmod.js').DB;
+var db = require('./dbmod.js');
 var fetchmod = {
 	
+	fetchSegs: function(struct,callback){
+		var fuzzyfixer = require('./fuzzyfixer.js'), pather = require('../support/pather.js').patherbuilder();
+		var Routes, eqpts, id = struct.id, routeId = struct.routeId, format = struct.format;
+		var routeCb = function(data,err){
+			Routes = data;
+			eqpts = pather.junctionUtil.getJuncs(Routes);
+			db.getStops(id,stopCb,routeId,format);
+		};
+		var stopCb = function(data,err){
+			var topojson = require('topojson');
+			var stops = topojson.feature(data,data.objects.stops);
+			stops = fuzzyfixer(Routes,stops);
+			pather.junctionUtil.mergeJuncs(stops,eqpts);
+			var generator = pather.nrGen(Routes.features,stops.features);
+			var segmentCollection = {};
+			Routes.features.forEach(function(route){
+				var id = route.properties.route_id;
+				segmentCollection[id] = generator(id);	
+			})
+			stops.bbox = data.bbox, stops.transform = data.transform
+			var retObj = {segments:segmentCollection,stops:stops}
+			callback(retObj);
+		};
+		db.getRoute(id,routeCb,format);
+	},
 
 	fetch: function(route,callback){
-		//get all the data it needs via local functiosn
+		//get all the data it needs via local functions
 		//calculate things
 		var fuzzyfixer = require('./fuzzyfixer.js');
 		var id = route.agency_id, day= route.day, routeId=route.route_id,format= route.format;
@@ -46,8 +71,6 @@ var fetchmod = {
 			Stops = stops.features;								//store its features array in Stops variable
 			var multCb = tripCb(Routes.length,afterCb);
 			Routes.forEach(function(route){						//for each 'interesting' route					
-				//getRouteSchedule(agencyID,day,route_id,cb)
-				if(route.properties.route_id === '905-142');
 					db.getRouteSchedule(id,day,route.properties.route_id,multCb); //retrieve its trip info for the given day
 			 	
 			});
@@ -85,7 +108,7 @@ var fetchmod = {
 	}
 }
 
-module.exports={'fetchmod':fetchmod}
+module.exports=fetchmod;
 
 function distance(a,b){
 		return Math.sqrt( ( a[0] - b[0] ) * ( a[0] - b[0] ) + ( a[1] - b[1] ) * ( a[1] - b[1] ) );
