@@ -17,14 +17,15 @@ var fetchmod = {
 			stops = fuzzyfixer(Routes,stops);
 			pather.junctionUtil.mergeJuncs(stops,eqpts);
 			var generator = pather.nrGen(Routes.features,stops.features);
-			var segmentCollection = {};
+			var segmentCollection = {type:'FeatureCollection',features:[]};
 			Routes.features.forEach(function(route){
 				var id = route.properties.route_id;
-				segmentCollection[id] = generator(id);	
+				segmentCollection.features.push(generator(id))
 			})
-			stops.bbox = data.bbox, stops.transform = data.transform
-			var retObj = {segments:segmentCollection,stops:stops}
-			callback(retObj);
+			segmentCollection.bbox = data.bbox;
+			segmentCollection.transform = data.transform;
+
+			callback(segmentCollection);
 		};
 		db.getRoute(id,routeCb,format);
 	},
