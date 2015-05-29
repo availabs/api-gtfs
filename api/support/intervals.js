@@ -19,9 +19,10 @@ function getAllRouteIntervals(tripData,RouteData,route_id,Stops,graph){
 	keys.forEach(function(id){
 		current = tripData[id];
 		tripIntervals[id] = {
-							 'intervals':getIntervals(current,RouteData,route_id,Stops,graph)(),
-							 'range': {begin:current[0].departure_time,end:current[current.length-1].arrival_time}
-							};
+						 'intervals':getIntervals(current,RouteData,route_id,Stops,graph)(),
+						 'range': {begin:current[0].departure_time,end:current[current.length-1].arrival_time}
+						};	
+		
 
 	})
 	return function(){return tripIntervals};
@@ -89,8 +90,13 @@ function getIntervals(oneTripsData,RouteData,route_id,Stops,graph){
 		var timeObj = new TimeObj();						//instantiate a time object
 		timeObj.start_id = nparse(oneTripsData[i].stop_id); // set the start id of the first stop
 		timeObj.start = oneTripsData[i].departure_time;		// get the departure and arrival time
+		for(i; oneTripsData[i+1].stop_id === timeObj.start_id; i++) //skip data errors of redundant stops
+			console.log('Data Error',oneTripsData[i+1].stop_id,route_id);
+
+
 		for(i; oneTripsData[i+1].arrival_time === null || oneTripsData[i+1].arrival_time === ''; i++)
-			console.log('skip');
+			console.log('Skip');	//skip data errors of bad arrival times
+		
 		timeObj.stop = oneTripsData[i+1].arrival_time;		
 		timeObj.stop_id = nparse(oneTripsData[i+1].stop_id);//get the id of the second stop
 		timeObj.lineID = "_s_" + timeObj.start_id +"_e_"+timeObj.stop_id; // create the line label

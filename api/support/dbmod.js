@@ -127,7 +127,29 @@ var DBMod = {
 				  		
 				  	});
 			  	});
-		}
+		},
+		getSimpleSchedule: function(agencyID,day,cb){
+			Agency.findOne(agencyID).exec(function (err, agency) {
+				  	var routesCollection = {};
+				  	var datafile = agency.current_datafile;
+				  	routesCollection.type = "FeatureCollection";
+				  	routesCollection.features = [];
+				  	var sql = "SELECT MIN(ST.departure_time)as starting,MAX(ST.arrival_time)as ending, "
+				  			 +"T.route_id, T.service_id, T.trip_id,T.direction_id, array_agg(ST.stop_id Order By ST.stop_sequence) as stops "  
+       						 +"FROM \""+datafile+"\".trips as T " 
+							 +"JOIN \""+datafile+"\".stop_times as ST "
+							 +"ON T.trip_id = ST.trip_id "
+							 +"JOIN \""+datafile+"\".calendar as C "
+							 +"ON T.service_id = C.service_id "
+							 //+"WHERE C."+day+ " " 
+							 +"Group By T.trip_id "  
+							 +"Order By T.route_id, starting; "
+
+					Route.query(sql,{},function(err,data){
+				      	cb(err,data);
+				  	});
+			  	});
+		},
 	
 }
 

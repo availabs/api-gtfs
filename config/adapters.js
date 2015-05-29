@@ -21,7 +21,7 @@ module.exports.adapters = {
   // This is where you want to load your GTFS DATA 
   postgres:{
     module: 'sails-postgresql',
-    host: 'lor.availabs.org',
+    host: /*'lor.availabs.org'*/'169.226.142.154',
     user: 'postgres',
     password: 'transit',
     database:'gtfs',

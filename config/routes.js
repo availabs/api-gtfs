@@ -58,6 +58,18 @@ module.exports.routes = {
   '/agency/:id/segmentData':{
         controller    : 'AgencyController',
         action        : 'segmentData' 
+  },
+  '/agency/:id/:day/schedule':{
+        controller    : 'AgencyController',
+        action        : 'simpleScheduleData'
+  },
+  'post /data/upload/stops':{
+        controller    : 'AgencyController',
+        action        : 'uploadStops'
+  },
+  'post /data/upload/route':{
+        controller    : 'AgencyController',
+        action        : 'uploadRoute'
   }
 
 

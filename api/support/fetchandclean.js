@@ -8,6 +8,10 @@ var fetchmod = {
 		var Routes, eqpts, id = struct.id, routeId = struct.routeId, format = struct.format;
 		var routeCb = function(data,err){
 			Routes = data;
+			Routes.features = Routes.features.filter(function(d){
+				if(d.geometry.coordinates.length > 0)
+					return true;
+			})
 			eqpts = pather.junctionUtil.getJuncs(Routes);
 			db.getStops(id,stopCb,routeId,format);
 		};
@@ -39,17 +43,20 @@ var fetchmod = {
 		var pather = patherbuilder.patherbuilder();
 		var intervalStructure= require('../support/intervals.js').intervalStructure();//interval generator object;
 		var geoJson,stopData;
-		var Stops=[],Routes=[],RDict = {};
+		var Stops=[],Routes=[],RDict = {},eqpts;
+		var newRoutes = {};
+
 		var routeCb = function(data,err){  					//on retreival of route data
 			geoJson = data;									//store it in geoJson variable
 			Routes = geoJson.features;						//store the array in Routes variable
 			Routes.forEach(function(route){
 				RDict[route.properties.route_id] = route;
 			})
-			var eqpts = findJunctions(Routes);				//find all junction points in the route topology
-			eqpts.forEach(function(d){						//treat them as psuedo stops
-				Stops.push(d);
-			});
+			Routes = Routes.filter(function(d){
+				if(d.geometry.coordinates.length > 0)
+					return true;
+			})
+			eqpts = pather.junctionUtil.getJuncs(geoJson);				//find all junction points in the route topology
 			console.log("fetching stops data");
 			db.getStops(id,stopCb,routeId,format); //then get all the stops with this agency
 		}
@@ -57,22 +64,20 @@ var fetchmod = {
 			stopData = data;								//store it in stopData variable
 			var topojson = require('topojson'); 			//load topojson library to extract features from stops object
 			var stops = topojson.feature(stopData,stopData.objects.stops);
-
 			stops = fuzzyfixer(geoJson,stops);
-			for(var i = 0; i< Stops.length; i++){        		//look at every junction
-				var junc = Stops[i].geometry.coordinates;		//get the current junction point
-				var exists = false;
-				stops.features.forEach(function(d,i){			//look at every stop data point
-					if(distance(d.geometry.coordinates,junc) === 0) //if the junction lies on an existing stop
-						exists = true;	
-				})
-				//if(!exists)										//don't add it to the final list
-					stops.features.push(Stops[i]);
-			}
+			pather.junctionUtil.mergeJuncs(stops,eqpts);
 			Stops = stops.features;								//store its features array in Stops variable
+			var generator = pather.nrGen(Routes,Stops,'segments');
+			
 			var multCb = tripCb(Routes.length,afterCb);
-			Routes.forEach(function(route){						//for each 'interesting' route					
-					db.getRouteSchedule(id,day,route.properties.route_id,multCb); //retrieve its trip info for the given day
+			Routes.forEach(function(route){						//for each 'interesting' route
+				var rid = route.properties.route_id;
+				//console.log(rid);
+				newRoutes[rid] = generator(rid)
+				
+				db.getRouteSchedule(id,day,rid,multCb); //retrieve its trip info for the given day
+									
+					
 			 	
 			});
 		}
@@ -80,8 +85,9 @@ var fetchmod = {
 		var tripCb =function(numCalls,afterCallback){
 			var count = 0;
 			return function(route_id,data){
-				console.log("fetching trip data for " + route_id);
+				//console.log("fetching trip data for " + route_id);
 				var tripData = {};
+				debugger;
 				data.forEach(function(d){
 					var trip_id = d.trip_id.replace(d.trip_id.substring(d.trip_id.lastIndexOf('_'),d.trip_id.indexOf('.')+1),'_'+route_id+'.');
 					if(!tripData[trip_id])
@@ -89,10 +95,8 @@ var fetchmod = {
 					tripData[trip_id].push(d);				
 				});
 				
-				var pathcoll = pather.getPathCollection(Routes,Stops);
-				var newRoute = pather.getStops(route_id,Routes,pathcoll);
-				newRoute = pather.getRouteSegs(newRoute);
 				var graph = pather.graph;
+				newRoute = newRoutes[route_id];
 				intervalStructure.addIntervals(tripData,newRoute,'route_'+route_id,Stops,graph);
 				count += 1;
 				if(count >= numCalls){

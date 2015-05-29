@@ -1,0 +1,11 @@
+﻿SELECT MIN(ST.departure_time)as starting,MAX(ST.arrival_time)as ending, 
+				  			 T.route_id, T.service_id, T.trip_id,T.direction_id, array_agg(ST.stop_id Order By ST.stop_sequence) as stops 
+       						 FROM cdta_20130906_0131.trips as T 
+							 JOIN cdta_20130906_0131.stop_times as ST 
+							 ON T.trip_id = ST.trip_id 
+							 JOIN cdta_20130906_0131.calendar as C 
+							 ON T.service_id = C.service_id 
+							 WHERE C.tuesday and T.route_id='1-142'
+							 Group By T.trip_id 
+							 Order By T.route_id, starting; 
+  

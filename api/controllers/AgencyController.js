@@ -1,5 +1,6 @@
 var topojson = require("topojson");
 var assetCache = require("../support/assetCache.js");
+var db = require('../support/dbmod.js');
 /**
  * AgencyController
  *
@@ -247,7 +248,36 @@ module.exports = {
 			res.json("Type Not Supported")
 		}
 
-	}
+	},
+	simpleScheduleData: function(req,res){
+		if(typeof req.param('id') == 'undefined'){
+			res.send('{status:"error",message:"Missing parameter: id. (Agency)"}',500);		
+		}
+		if(typeof req.param('day') == 'undefined'){
+			res.send('{status:"error",message:"Missing parameter: day."}',500);
+		}
+
+		db.getSimpleSchedule(req.param('id'),req.param('day'),function(err,data){
+			if(err){
+				console.log(err);
+				res.send('{status:"error",message:"'+err+'"}',500);
+				return
+			}
+			res.json(data.rows);
+		})
+	},
+
+	uploadStops: function(req,res){
+		var obj = req.body;
+		obj.test = 345;
+		res.json(obj);	
+	},
+
+	uploadRoute: function(req,res){
+		var obj = req.body;
+		obj.test = 234;
+		res.json(obj);
+	},
 };
 
 var sendRouteData = function(res,route,data){
