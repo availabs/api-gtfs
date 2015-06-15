@@ -1,7 +1,57 @@
 //DBMod.js
 var topojson = require('topojson');
+var dbbackup = require('./dbbackup');
+var dbhelper = require('./batchmod.js');
+var Feature = require('./feature.js');
 function preserveProperties(feature) {
   return feature.properties;
+}
+function puts(err,stdout,stderr){
+	sys.puts(stdout);
+	sys.puts(stderr);
+}
+function updateStopTimes(datafile,trips,deltas){
+	var map = ['trips','deltas','file'],template = 'Select update_st_times(?,?,\'?\')';
+	var sqlTimeUpdate = new dbhelper(template,{
+												trips:formatStringList(trips),
+												deltas:formatIntList(deltas),
+												file:datafile
+											});
+	sqlTimeUpdate.setMapping(map);
+	return sqlTimeUpdate.getQuery();
+}
+function getField(field,feat){
+	if(field === 'trips'){
+		return formatStringList(feat.get(field));
+	}else if(field === 'geo'){
+		return JSON.stringify(feat.get(field));
+	}else{
+		return feat.get(field);
+	}
+}
+
+function formatIntList(ints){
+	return'Array['+ints.toString()+']';
+}
+
+function formatStringList(strings){
+	var outString =''; 
+		var temp = strings[0];
+		var templist= strings.filter(function(e,i,a){return i!==0;})
+		outString = templist.reduce(function(pr,cur,i,arr){
+			return pr + ',\'' + cur+'\'';
+		}, ['\''+temp+'\''])		
+	return 'Array[' + outString + ']';
+}
+
+function buildFeatureQuery(temp1,m1,f){
+	var data1={};
+	m1.forEach(function(field){
+		data1[field] = getField(field,f);
+	})
+	dbhelp = new dbhelper(temp1,data1);
+	dbhelp.setMapping(m1);
+	return dbhelp.getQuery();
 }
 
 var DBMod = {
@@ -134,22 +184,170 @@ var DBMod = {
 				  	var datafile = agency.current_datafile;
 				  	routesCollection.type = "FeatureCollection";
 				  	routesCollection.features = [];
-				  	var sql = "SELECT MIN(ST.departure_time)as starting,MAX(ST.arrival_time)as ending, "
-				  			 +"T.route_id, T.service_id, T.trip_id,T.direction_id, array_agg(ST.stop_id Order By ST.stop_sequence) as stops "  
-       						 +"FROM \""+datafile+"\".trips as T " 
-							 +"JOIN \""+datafile+"\".stop_times as ST "
-							 +"ON T.trip_id = ST.trip_id "
-							 +"JOIN \""+datafile+"\".calendar as C "
-							 +"ON T.service_id = C.service_id "
-							 //+"WHERE C."+day+ " " 
-							 +"Group By T.trip_id "  
-							 +"Order By T.route_id, starting; "
+				  	var sql = 'Select T2.stops, array_agg(T2.starting ORDER BY T2.starting)as starts,T2.route_id, array_agg(T2.ending ORDER BY T2.starting) as ends, array_agg(T2.trip_id ORDER BY T2.starting) as trips from ( '
+							+'SELECT MIN(ST.departure_time)as starting,MAX(ST.arrival_time)as ending, '
+				  			+'T.route_id, T.service_id, T.trip_id,T.direction_id, array_agg(ST.stop_id Order By ST.stop_sequence) as stops '
+							+'FROM \"'+datafile+'\".trips as T '
+							+'JOIN \"'+datafile+'\".stop_times as ST ' 
+							+'ON T.trip_id = ST.trip_id '
+							+'JOIN \"'+datafile+'\".calendar as C '
+							+'ON T.service_id = C.service_id '
+							+'Group By T.trip_id '
+							+'Order By T.route_id, starting, T.trip_id '
+							+') as T2 ' 
+					+'Group By T2.stops,T2.route_id;'
 
 					Route.query(sql,{},function(err,data){
 				      	cb(err,data);
 				  	});
 			  	});
 		},
+
+		putRoute:function(agencyID,routeId,geojson,cb){
+			Agency.findOne(agencyId).exec(function(err,agency){
+				var datafile = agency.current_datafile;
+				var sql = "UPDATE \""+datafile+"\".routes "
+						+ 'SET geom = ST_SetSRID(ST_GeomFromGeoJSON('+geojson+'),4326) '
+						+ 'WHERE route_id=\''+routeId+'\'';
+				Route.query(sql,{},function(err,data){
+					if(err){
+						console.log(err);
+						console.log(sql);
+					}
+					cb(err,data);
+				});
+			});
+		},
+
+		addDelStops:function(agencyId,featlist,trips,deltas,cb){
+			if(featlist.length <=0) cb(undefined,{});
+			Agency.findOne(agencyId).exec(function(err,agency){
+				debugger;
+				var datafile = agency.current_datafile,sql = '';
+				var template1 = 'INSERT INTO "?".stops(geom,stop_lon,stop_lat,stop_id,stop_name)'
+							  + 'VALUES (ST_SetSRID(ST_GeomFromGeoJSON(\'?\'),4326), ?, ?, \'?\',\'?\')',
+					template2 = 'SELECT add_stop_to_stop_times(\'?\',?,?,\'?\')',
+
+					template3 = 'SELECT del_stop_from_stop_times(?,?,\'?\')',
+					template4 = 'DELETE FROM "?".stops WHERE stop_id=\'?\'';
+					
+
+				var map1 = ['file','geo','lon','lat','stop_id','stop_name']
+				var map2 = ['stop_id','sequence','trips','file']
+				var map3 = ['sequence','trips','file']
+				var map4 = ['file','stop_id']
+				
+				featlist.forEach(function(feat){
+					var temp1,temp2,m1,m2,data1={},data2={};
+					feat.file = datafile;
+					feat.trips = trips;
+					var f = new Feature(feat);
+					if(feat.isNew()){ //if it is a new feature add it to the database
+						sql += buildFeatureQuery(template1,map1,f);
+						sql += buildFeatureQuery(template2,map2,f);
+					}
+					else if(feat.isDeleted()){ //if it was marked for deletion from a tgroup
+						sql += buildFeatureQuery(template3,map3,f);//delete from tgroup
+						if(feat.wasRemoved){	//if it was marked for removal
+							sql += buildFeatureQuery(template4,map4,f);//remove it from the database.
+						}
+					}
+				});
+				sql += updateStopTimes(datafile,trips,deltas);
+				sql = 'Begin;' + sql + 'COMMIT;'; 
+				console.log(sql);
+				Route.query(sql,{},function(err,data){
+					if(err){
+						console.log(err);
+						console.log(sql)
+					}
+					cb(err,data);
+				})
+			});
+		},
+
+		putStops: function(agencyId,featlist,trips,deltas,cb){
+			var updates,insertsDeletes;
+			debugger;
+			updates = featlist.filter(function(feat){return !(feat.isNew() || feat.isDeleted());});
+			insertsDeletes = featlist.filter(function(feat){return feat.isNew() || feat.isDeleted();});
+			if(insertsDeletes.length > 0){
+				this.addDelStops(agencyId,insertsDeletes,trips,deltas,cb);
+			}else{
+				cb(undefined,{});
+			}
+			if(updates.length > 0){
+				this.updateStops(agencyId,updates,trips,deltas,cb);
+			} else{
+				cb(undefined,{});
+			}
+		},
+
+		updateStops:function(agencyId,featlist,trips,deltas,cb){
+			if(featlist.length <= 0) cb(undefined,{})
+			Agency.findOne(agencyId).exec(function(err,agency){
+				var template = 'UPDATE "?".stops '  //!!!!Dangerous code if failures but for now if one fails, the rest persist
+													//and no one knows the difference!!!
+							+ 'SET geom = ST_SetSRID(ST_GeomFromGeoJSON(\'?\'),4326), '
+							+ 'stop_lon=?, stop_lat=?,stop_name=\'?\' WHERE stop_id=\'?\''
+					
+				var datafile = agency.current_datafile, data={}, data2={}, sql='';
+				var map  = ['file','geo','lon','lat','stop_name','stop_id'];
+				featlist.forEach(function(feat){
+					feat.file=datafile;
+					feat.trips=trips;
+					var f = new Feature(feat);
+					sql += buildFeatureQuery(template,map,f);
+				});
+				sql += updateStopTimes(datafile,trips,deltas); //update the arrivals & departures of the necessary trips
+																//based on the time deltas.
+				sql = 'Begin;' + sql + 'Commit;';
+				console.log(sql);
+				Route.query(sql,{},function(err, data){
+					if(err){
+						console.log(err);
+						console.log(sql);
+					}
+					cb(err,data);
+				});
+			});
+		},
+
+		backup:function(cb){
+			Agency.find().exec(function(err,agencies){
+				var files = [];
+				agencies.forEach(function(agency){
+					var datafile = agency.current_datafile;
+					if(datafile !== 'public'){
+						files.push(datafile);
+					}
+					dbbackup(files);
+				});
+				cb(err,{data:'Things'})
+			});
+		},
+
+		getStop:function(agencyId,stopId,cb){
+			Agency.findOne(agencyId).exec(function(err,agency){
+				var datafile = agency.current_datafile;
+				var sql = 'SELECT ST_AsGeoJson(geom) as geo FROM \"'+datafile+'\".stops WHERE stop_id=\''+stopId.toString()+'\'';
+				
+				Route.query(sql,{},function(err,data){
+					var stopinfo = {};
+					if(err){
+						console.log(err);
+						cb(err,{});
+					}
+					else{
+						
+						data.rows.forEach(function(stop,index){
+							stopinfo.geo = JSON.parse(stop.geo);
+						})
+						cb(err,stopinfo);	
+					}
+				})  
+			})
+		}
 	
 }
 

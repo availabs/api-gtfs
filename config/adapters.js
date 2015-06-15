@@ -19,13 +19,22 @@ module.exports.adapters = {
   'default': 'postgres',
   // POSTGIS DATABASE
   // This is where you want to load your GTFS DATA 
+  // postgres:{
+  //   module: 'sails-postgresql',
+  //   host: /*'lor.availabs.org'*/'169.226.142.154',
+  //   user: 'postgres',
+  //   password: 'transit',
+  //   database:'gtfs',
+  //   port: 5432,
+  //   pool: true
+  // },
   postgres:{
     module: 'sails-postgresql',
-    host: /*'lor.availabs.org'*/'169.226.142.154',
-    user: 'postgres',
-    password: 'transit',
+    host:'127.0.0.1',
+    user:'postgres',
+    password:'passwd',
     database:'gtfs',
     port: 5432,
     pool: true
-  }
+  },
 };

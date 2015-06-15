@@ -1,4 +1,5 @@
 var topojson = require("topojson");
+var Stop     = require('../support/models/stop');
 var assetCache = require("../support/assetCache.js");
 var db = require('../support/dbmod.js');
 /**
@@ -16,7 +17,7 @@ function preserveProperties(feature) {
 }
 
 
-module.exports = {
+module.exports = { 
 
   /* e.g.
   sayHello: function (req, res) {
@@ -60,7 +61,7 @@ module.exports = {
 		  				var feature = {type:'Feature',properties:d.properties, geometry:{type:mesh.type, coordinates:mesh.coordinates}};
 		  			 	newJson.features.push(feature);
 		  			 })
-
+					// res.send(topology);
 		  			res.send(newJson);
 		  			//JSON.stringify()
 		  			
@@ -268,16 +269,78 @@ module.exports = {
 	},
 
 	uploadStops: function(req,res){
-		var obj = req.body;
-		obj.test = 345;
-		res.json(obj);	
+		var reqobj = req.body;
+		var agency = reqobj.id;
+		var featList = reqobj.data
+		.map(function(d){
+				return new Stop(d.stop);
+			});
+		console.log(featList);
+		debugger;
+		var trips = reqobj.trip_ids;
+		var deltas = reqobj.deltas;
+		var responses = 0;
+		var errlist=[],datalist=[];
+		if(typeof agency === 'undefined'){
+			res.send('{status:"error",message:"Missing parameter:id. (Agency)"}',500)
+		}
+		if(typeof featList === 'undefined'){
+			res.send('{status:"error",message:"Missing parameter:geometry"}', 500);
+		}
+				
+		db.putStops(agency,featList,trips,deltas,function(err,data){
+			responses += 1;
+			errlist.push(err); datalist.push(data);
+			if(responses >= 2){
+				var waserr = errlist.reduce(function(pv,cv,i,arr){return pv || cv;})
+				if(waserr){
+					res.send('{status:"error",message:'+JSON.stringify(errlist)+'}', 500)
+				}
+				else{
+					console.log("HERE");
+					res.json(datalist);
+				}	
+			}
+			
+		});			
+	},
+	getStop:function(req,res){ ///////////DEBUGGING//////////////
+		var agency = req.param('id')
+		var stop = req.param('stopId')
+		if(typeof agency === 'undefined'){
+			res.send('{status:"error",message:"Missing parameter:id. (Agency)"}', 500);
+		}
+		if(typeof stop === 'undefined'){
+			res.send('{status:"error",message:"Missing parameter:id. (stop)"}', 500);
+		}
+		db.getStop(agency,stop,function(err,data){
+			res.json(data);
+		});
 	},
 
 	uploadRoute: function(req,res){
-		var obj = req.body;
-		obj.test = 234;
-		res.json(obj);
+		var agency = req.param('id');
+		var route = req.param('routeId')
+		if(typeof agency === 'undefined'){
+			res.send('{status:"error",message:"Missing parameter:id. (Agency)"}', 500);
+		}
+		if(typeof stop === 'undefined'){
+			res.send('{status:"error",message:"Missing parameter:id. (stop)"}', 500);
+		}
+		db.putRoute(agency,route,geomobj,function(err,data){
+
+		});
 	},
+
+	backup: function(req,res){
+		var secret = req.param('secret');
+		if(typeof secret === 'undefined' || secret !== 'TheSuperSecretPassword'){
+			res.send('{status:"error",message:"Incorrect Secret"}',500);
+		}
+		db.backup(function(err,data){
+			res.json(data);
+		});
+	}
 };
 
 var sendRouteData = function(res,route,data){
