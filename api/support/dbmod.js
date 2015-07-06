@@ -14,7 +14,7 @@ function updateStopTimes(datafile,trips,deltas){
 	var map = ['trips','deltas','file'],template = 'Select update_st_times(?,?,\'?\')';
 	var sqlTimeUpdate = new dbhelper(template,{
 												trips:formatStringList(trips),
-												deltas:formatIntList(deltas),
+												deltas:formatNumList(deltas),
 												file:datafile
 											});
 	sqlTimeUpdate.setMapping(map);
@@ -30,8 +30,8 @@ function getField(field,feat){
 	}
 }
 
-function formatIntList(ints){
-	return'Array['+ints.toString()+']';
+function formatNumList(nums){
+	return'Array['+nums.toString()+']';
 }
 
 function formatStringList(strings){
@@ -203,27 +203,37 @@ var DBMod = {
 			  	});
 		},
 
-		putRoute:function(agencyID,routeId,geojson,cb){
-			Agency.findOne(agencyId).exec(function(err,agency){
-				var datafile = agency.current_datafile;
-				var sql = "UPDATE \""+datafile+"\".routes "
-						+ 'SET geom = ST_SetSRID(ST_GeomFromGeoJSON('+geojson+'),4326) '
-						+ 'WHERE route_id=\''+routeId+'\'';
-				Route.query(sql,{},function(err,data){
-					if(err){
-						console.log(err);
-						console.log(sql);
-					}
-					cb(err,data);
-				});
-			});
+		putShape:function(datafile,routeId,trips,geojson,dbhelper){
+				debugger;
+				//first delete the shape if it exists in the shape table x
+				//update or insert the shape into the shapes table x
+				//insert new trips into the trips table 
+				//use the distinct shape id's associated with all trips involved  
+				//to reforge the geometry of the associated route in the routes table
+				var template1 = 'SELECT delete_and_update_shapes_with_trips(?,?,?,?,\'?\')', 
+				map = ['trips','lats','lons','geoms','file'],sql = '';
+				var lons=[],lats=[],dbhelper;
+				var geoms = geojson.coordinates.map(function(pt){
+					lats.push(pt[1]), lons.push(pt[0]);
+					return JSON.stringify({type:"Point",coordinates:pt});
+				})
+				lons = formatNumList(lons);
+				lats = formatNumList(lats);
+				trips = formatStringList(trips);
+				geoms = formatStringList(geoms);
+				data = {trips:trips,lats:lats,lons:lons,geoms:geoms,file:datafile};
+				dbhelp = new dbhelper(template1,data);
+				dbhelp.setMapping(map);
+				sql = dbhelp.getQuery();
+				// console.log(sql);
+				return sql;
 		},
 
-		addDelStops:function(agencyId,featlist,trips,deltas,cb){
+		addDelStops:function(datafile,featlist,trips,deltas,cb){
 			if(featlist.length <=0) cb(undefined,{});
-			Agency.findOne(agencyId).exec(function(err,agency){
+			
 				debugger;
-				var datafile = agency.current_datafile,sql = '';
+				var sql = '';
 				var template1 = 'INSERT INTO "?".stops(geom,stop_lon,stop_lat,stop_id,stop_name)'
 							  + 'VALUES (ST_SetSRID(ST_GeomFromGeoJSON(\'?\'),4326), ?, ?, \'?\',\'?\')',
 					template2 = 'SELECT add_stop_to_stop_times(\'?\',?,?,\'?\')',
@@ -254,44 +264,73 @@ var DBMod = {
 					}
 				});
 				sql += updateStopTimes(datafile,trips,deltas);
-				sql = 'Begin;' + sql + 'COMMIT;'; 
-				console.log(sql);
-				Route.query(sql,{},function(err,data){
-					if(err){
-						console.log(err);
-						console.log(sql)
-					}
-					cb(err,data);
-				})
-			});
+				// console.log(sql);
+				return sql;
 		},
 
-		putStops: function(agencyId,featlist,trips,deltas,cb){
-			var updates,insertsDeletes;
+
+
+		putStops: function(datafile,featlist,trips,deltas){
+			var updates,insertsDeletes,sql = '';
 			debugger;
 			updates = featlist.filter(function(feat){return !(feat.isNew() || feat.isDeleted());});
 			insertsDeletes = featlist.filter(function(feat){return feat.isNew() || feat.isDeleted();});
 			if(insertsDeletes.length > 0){
-				this.addDelStops(agencyId,insertsDeletes,trips,deltas,cb);
-			}else{
-				cb(undefined,{});
+				sql += this.addDelStops(datafile,insertsDeletes,trips,deltas);
 			}
 			if(updates.length > 0){
-				this.updateStops(agencyId,updates,trips,deltas,cb);
-			} else{
-				cb(undefined,{});
+				sql += this.updateStops(datafile,updates,trips,deltas);
 			}
+			return sql;
 		},
 
-		updateStops:function(agencyId,featlist,trips,deltas,cb){
-			if(featlist.length <= 0) cb(undefined,{})
+		putTrip: function(datafile,trip){
+			var template = 'INSERT INTO \"?\".trips(trip_id,service_id,route_id) VALUES '
+						  +'(\'?\',\'?\',\'?\')', map =['file','trip_id','service_id','route_id'],sql ='';
+
+			var data = {file:datafile,trip_id:trip.trip_ids,service_id:trip.service_id,route_id:trip.route_id};
+			dbhelp = new dbhelper(template,data);
+			dbhelp.setMapping(map);
+			return dbhelp.getQuery();
+		},
+
+		putRoute: function(datafile,route_id){
+			var sql = 'INSERT INTO \"'+datafile+'\".routes(route_id,route_type) Values (\''+route_id+'\',3);';
+			return sql;
+		},
+
+		putData:function(agencyId,featlist,trips,deltas,route_id,shape,trip,cb){
+			var db = this;
 			Agency.findOne(agencyId).exec(function(err,agency){
+				var sql = '', datafile=agency.current_datafile;
+			
+
+				console.log(trip.isNew);
+				if(trip.isNew){
+					sql += db.putRoute(datafile,route_id);
+					sql += db.putTrip(datafile,trip)
+				}
+				//sql += db.putStops(datafile,featlist,trips,deltas);
+				sql += db.putShape(datafile,route_id,trips,shape,dbhelper);
+				sql = 'BEGIN ' + sql + ' COMMIT;'
+				Route.query(sql,{},function(err, data){
+					if(err){
+						console.log(err);
+						console.log(sql);
+					}
+					cb(err,data);
+				});
+			})
+		},
+
+		updateStops:function(datafile,featlist,trips,deltas,cb){
+			if(featlist.length <= 0) cb(undefined,{})
 				var template = 'UPDATE "?".stops '  //!!!!Dangerous code if failures but for now if one fails, the rest persist
 													//and no one knows the difference!!!
 							+ 'SET geom = ST_SetSRID(ST_GeomFromGeoJSON(\'?\'),4326), '
 							+ 'stop_lon=?, stop_lat=?,stop_name=\'?\' WHERE stop_id=\'?\''
 					
-				var datafile = agency.current_datafile, data={}, data2={}, sql='';
+				var data={}, data2={}, sql='';
 				var map  = ['file','geo','lon','lat','stop_name','stop_id'];
 				featlist.forEach(function(feat){
 					feat.file=datafile;
@@ -301,16 +340,8 @@ var DBMod = {
 				});
 				sql += updateStopTimes(datafile,trips,deltas); //update the arrivals & departures of the necessary trips
 																//based on the time deltas.
-				sql = 'Begin;' + sql + 'Commit;';
-				console.log(sql);
-				Route.query(sql,{},function(err, data){
-					if(err){
-						console.log(err);
-						console.log(sql);
-					}
-					cb(err,data);
-				});
-			});
+				// console.log(sql);
+				return sql;
 		},
 
 		backup:function(cb){

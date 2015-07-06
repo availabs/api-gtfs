@@ -281,6 +281,8 @@ module.exports = {
 		var deltas = reqobj.deltas;
 		var responses = 0;
 		var errlist=[],datalist=[];
+		var trip = reqobj.trip, route_id = trip.route_id;
+		var shape = reqobj.shape;
 		if(typeof agency === 'undefined'){
 			res.send('{status:"error",message:"Missing parameter:id. (Agency)"}',500)
 		}
@@ -288,20 +290,14 @@ module.exports = {
 			res.send('{status:"error",message:"Missing parameter:geometry"}', 500);
 		}
 				
-		db.putStops(agency,featList,trips,deltas,function(err,data){
-			responses += 1;
-			errlist.push(err); datalist.push(data);
-			if(responses >= 2){
-				var waserr = errlist.reduce(function(pv,cv,i,arr){return pv || cv;})
-				if(waserr){
-					res.send('{status:"error",message:'+JSON.stringify(errlist)+'}', 500)
-				}
-				else{
-					console.log("HERE");
-					res.json(datalist);
-				}	
+		db.putData(agency,featList,trips,deltas,route_id,shape,trip,function(err,data){
+			if(err){
+				res.send('{status:"error",message:'+JSON.stringify(errlist)+'}', 500)
 			}
-			
+			else{
+				console.log("HERE");
+				res.json(datalist);
+			}	
 		});			
 	},
 	getStop:function(req,res){ ///////////DEBUGGING//////////////

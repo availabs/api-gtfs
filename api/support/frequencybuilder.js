@@ -1,7 +1,8 @@
 var dbhelper = require('./batchmod.js');
 var pg = require('pg');
-var connString = 'postgres://postgres:passwd@localhost:5432/gtfs';
+var connString = 'yourconnectionstringhere';
 var fs = require('fs');
+var segFinder = require('./simsegments');
 var frequencybuilder = function(schema){
 
 	var dotprod = function(l1,l2){
@@ -11,7 +12,7 @@ var frequencybuilder = function(schema){
 		}
 		return sum
 	}
-	
+
 	var diffSecs = function(t1,t2){
 		factors = [3600,60,1]
 		t1 = t1.split(':');
@@ -36,13 +37,13 @@ var frequencybuilder = function(schema){
 					var t1 = starts[i];						//get current time
 					var t2 = starts[i+1];					//and forthcoming time
 					diffs.push(diffSecs(t1,t2));		//add their difference in seconds to the list
-				}	
+				}
 			}
 			//fs.appendFileSync('test.txt',JSON.stringify({starts:starts,diffs:diffs}));
 			diffMat.push(diffs);						//add this trip groups time deltas to a list
 		});
 		return diffMat;
-		parseData(data,diffMat);	//trips into logical trip groups
+
 
 	}
 
@@ -51,7 +52,7 @@ var frequencybuilder = function(schema){
 	//into groups
 	var parseGroups = function(List){
 		var groups = [[]], ix = 0,gix=0, lastEl, El;
-		lastEl = List[ix++];    
+		lastEl = List[ix++];
 		groups[gix].push(lastEl);	//push first element into the first group
 		while(ix < List.length){	//iterate through the list
 			El = List[ix]		//get the next element of list
@@ -61,7 +62,7 @@ var frequencybuilder = function(schema){
 				ix += 1;				//increment index in the list
 				El = List[ix];			//skip over the current element
 				lastEl = El;			//set the current element to the one following
-			}	
+			}
 			groups[gix].push(El)		//add the current element to the current group
 			ix += 1;						//increment the index
 		}
@@ -97,20 +98,45 @@ var frequencybuilder = function(schema){
 		return data;
 	}
 
+	var newParseData = function(data){
+
+		data.forEach(function(row,i){
+			var deltas = [], trip_ids=data[i].trips, tripList = [], starts = data[i].starts, startsList = [], ends=data[i].ends, endList=[];
+			debugger;
+			groupList = segFinder(row.starts,diffSecs);
+			groupList.forEach(function(group){
+				var len = group.seg.length;
+				deltas.push(group.del);
+				tripList.push(trip_ids.splice(0,len)); //add to the trip list the corresponding trips for each group
+				startsList.push(group.seg); //add to the starts list the corresponding start times for each group
+				endList.push(ends.splice(0,len));		//same for the end times
+			});
+			data[i].trips = tripList;
+			data[i].starts = startsList;
+			data[i].ends = endList;
+			data[i].deltas = deltas;
+		});
+		fs.writeFileSync('test.txt',JSON.stringify(data));
+		console.log('write finished')
+		return data;
+	}
+
 	var createFrequencies = function(data){
-		var template  = 'INSERT INTO "?".frequencies(start_time,end_time,headway_secs,group_id)'
+		var template  = 'INSERT INTO "?".frequencies(start_time,end_time,headway_secs,trip_id)'
 						+'VALUES (?,?,?,?)';
 		var objs = [];
 		data.forEach(function(topoGroup){
 			topoGroup.trips.forEach(function(tripGroup,i){
-				var obj = {
-					table:schema,
-					trip: '\'{' + tripGroup.toString() + '}\'',
-					start:"'"+topoGroup.starts[i][0]+"'",
-					end:"'"+topoGroup.starts[i][topoGroup.starts[i].length-1]+"'",
-					headway:topoGroup.deltas[i],	
-				} 
-				objs.push(obj);
+				tripGroup.forEach(function(trip_id){
+					var obj = {
+						table:schema,
+						trip: '\'{' + trip_id + '}\'',
+						start:"'"+topoGroup.starts[i][0]+"'",
+						end:"'"+topoGroup.starts[i][topoGroup.starts[i].length-1]+"'",
+						headway:topoGroup.deltas[i],
+					};
+					objs.push(obj);
+				});
 			});
 		});
 		map = ['table','start','end','headway','trip'];
@@ -122,8 +148,10 @@ var frequencybuilder = function(schema){
 	}
 
 	var handleResponse = function(data){
-		var deltaMat = processData(data.rows);
-		parseData(data.rows,deltaMat);
+		// var deltaMat = processData(data.rows);
+		// parseData(data.rows,deltaMat);
+		newParseData(data.rows);
+
 		var sql = createFrequencies(data.rows);
 		return sql;
 	}
@@ -132,8 +160,8 @@ var frequencybuilder = function(schema){
 			return console.error('error fetching client from pool',err)
 		}
 		var temp = 'Select array_agg(T2.starting ORDER BY T2.starting)as starts, array_agg(T2.ending ORDER BY T2.starting) as ends, T2.service_id, array_agg(T2.trip_id ORDER BY T2.starting) as trips from ( '
-							+'SELECT MIN(ST.departure_time)as starting,MAX(ST.arrival_time)as ending, '  
-				  			+'T.route_id, T.service_id, T.trip_id,T.direction_id, array_agg(ST.stop_id Order By ST.stop_sequence) as stops '
+							+'SELECT MIN(ST.departure_time)as starting,MAX(ST.arrival_time)as ending, '
+				  			+'T.route_id, T.service_id, T.shape_id, T.trip_id,T.direction_id, array_agg(ST.stop_id Order By ST.stop_sequence) as stops '
 							+'FROM "?".trips as T '
 							+'JOIN "?".stop_times as ST '
 							+'ON T.trip_id = ST.trip_id '
@@ -142,7 +170,7 @@ var frequencybuilder = function(schema){
 							+'Group By T.trip_id '
 							+'Order By T.route_id, starting, T.trip_id '
 							+	' ) as T2 '
-					+'Group by T2.stops,T2.route_id,T2.service_id;'
+					+'Group by T2.shape_id,T2.stops,T2.route_id,T2.service_id;'
 
 		dbhelp = new dbhelper(temp,[{table:schema,table2:schema,table3:schema}]);
 		dbhelp.setMapping(['table','table2','table3']);
@@ -163,6 +191,6 @@ var frequencybuilder = function(schema){
 
 
 }
-frequencybuilder('cdta_20130906_0131');
+frequencybuilder('gtfs_20141014_13_1_edited');
 
-module.exports= frequencybuilder; 
+module.exports= frequencybuilder;
