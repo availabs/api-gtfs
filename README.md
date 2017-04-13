@@ -8,3 +8,7 @@ To install
 4 - sails lift
 
 See [sailsjs.org](http://sailsjs.org/#!documentation/deployment) for an introduction to running sails in production
+
+To run with the required version of Node.js:
+1. sudo n -d 0.10
+1. forever start -c /usr/local/n/versions/node/0.10.48/bin/node api-gtfs.js
