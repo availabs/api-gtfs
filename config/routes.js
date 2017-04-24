@@ -57,7 +57,7 @@ module.exports.routes = {
   },
   '/agency/:id/segmentData':{
         controller    : 'AgencyController',
-        action        : 'segmentData' 
+        action        : 'segmentData'
   },
   '/agency/:id/:day/schedule':{
         controller    : 'AgencyController',
